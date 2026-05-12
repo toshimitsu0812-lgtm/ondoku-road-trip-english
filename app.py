@@ -2,18 +2,24 @@ import streamlit as st
 import asyncio
 import edge_tts
 import base64
-from notion_client import Client
+import os
 
-# --- 1. Notion接続設定 ---
-# 本番公開時は Streamlit Cloudの "Secrets" に保存します
-if "NOTION_TOKEN" in st.secrets:
-    notion = Client(auth=st.secrets["NOTION_TOKEN"])
-    DATABASE_ID = st.secrets["NOTION_DATABASE_ID"]
-else:
-    st.error("Notionの設定が見つかりません。Secretsを設定してください。")
-    st.stop()
+# --- 1. 教材データ（ここを自由に書き換えてください） ---
+# 複数の教材を入れたい場合は、辞書形式で増やせます
+MATERIALS = {
+    "L1": {
+        "title": "I Have a Dream",
+        "en": "I have a dream that one day this nation will rise up and live out the true meaning of its creed.",
+        "ja": "私には夢がある。いつの日か、この国が立ち上がり、その信条の真の意味を実践することを。"
+    },
+    "L2": {
+        "title": "Imagine",
+        "en": "Imagine all the people living life in peace. You may say I'm a dreamer, but I'm not the only one.",
+        "ja": "すべての人が平和に生きていると想像してごらん。君は僕を夢想家だと言うかもしれない。でも、僕一人じゃないんだ。"
+    }
+}
 
-# --- 2. 称号システム (ロードトリップ) ---
+# --- 2. 称号システム (Road Trip) ---
 def get_rank(completes):
     ranks = [
         (50, "West Coast Legend", "San Francisco", "🔥", "#000000"),
@@ -35,65 +41,46 @@ async def generate_voice(text):
 # --- 4. メインUI ---
 st.set_page_config(page_title="English Road Trip", layout="wide")
 
-# URLから教材IDを取得 (?lesson=L1)
+# URLの末尾 (?lesson=L1) から教材を特定。指定がなければL1を表示。
 query_params = st.query_params
 lesson_id = query_params.get("lesson", "L1")
 
-# --- Notionから教材データを取得 ---
-@st.cache_data(ttl=600)
-def fetch_lesson(l_id):
-    results = notion.databases.query(
-        database_id=DATABASE_ID,
-        filter={"property": "ID", "title": {"equals": l_id}}
-    ).get("results")
-    if results:
-        props = results[0]["properties"]
-        return {
-            "title": props["Lesson Title"]["rich_text"][0]["plain_text"],
-            "en": props["English Text"]["rich_text"][0]["plain_text"],
-            "ja": props["Japanese Translation"]["rich_text"][0]["plain_text"]
-        }
-    return None
+# 教材の取得
+lesson_data = MATERIALS.get(lesson_id, MATERIALS["L1"])
 
-lesson_data = fetch_lesson(lesson_id)
-
-if not lesson_data:
-    st.warning(f"教材 '{lesson_id}' が見つかりません。Notionを確認してください。")
-    st.stop()
-
-# サイドバー
+# サイドバー (進捗表示)
 with st.sidebar:
     st.title("🗺️ My Progress")
     user_name = st.text_input("Name", "Student")
-    total_comp = st.number_input("Total Completes", 0) # 本来はログDBから集計
+    total_comp = st.number_input("Total Completes", 0, step=1)
     rank, city, icon, color = get_rank(total_comp)
-    st.markdown(f"<div style='background-color:{color}; padding:15px; border-radius:10px; color:white; text-align:center;'><h3>{icon} {rank}</h3><p>{city}</p></div>", unsafe_allow_html=True)
+    st.markdown(f"<div style='background-color:{color}; padding:20px; border-radius:10px; color:white; text-align:center;'><h2>{icon} {rank}</h2><p>Dest: {city}</p></div>", unsafe_allow_html=True)
 
-# 修行画面
+# メインコンテンツ
 st.title(f"🚀 {lesson_data['title']}")
-tabs = st.tabs(["R0: Intro", "R1-R4: Training", "R5: Final"])
 
-with tabs[0]:
-    st.subheader("Meaning Check")
+tab0, tab1, tab2 = st.tabs(["📖 Reading", "🎧 Training", "🏁 Finish"])
+
+with tab0:
+    st.subheader("Text & Meaning")
     st.info(lesson_data['en'])
-    st.success(lesson_data['ja'])
+    with st.expander("日本語訳を表示"):
+        st.write(lesson_data['ja'])
 
-with tabs[1]:
-    mode = st.radio("Mode", ["R1: Repeating", "R4: Shadowing"])
-    if mode == "R1: Repeating":
-        st.write(lesson_data['en'])
+with tab1:
+    mode = st.radio("Practice Mode", ["Visible (R1-R3)", "Hidden (R4)"])
+    if mode == "Visible (R1-R3)":
+        st.info(lesson_data['en'])
     else:
-        st.write("*(Text Hidden)*")
+        st.warning("Concentrate on the SOUND!")
     
-    if st.button("🔊 Listen"):
+    if st.button("🔊 Play Voice"):
         asyncio.run(generate_voice(lesson_data['en']))
         with open("speech.mp3", "rb") as f:
             st.audio(f.read(), format="audio/mp3")
 
-with tabs[2]:
-    st.subheader("Final Performance")
-    st.write("録音して修行を完了しましょう！")
-    if st.button("🏁 修行完了ボタンを押す"):
-        # ここでNotionのログDBに書き込む処理を追加可能
+with tab2:
+    st.subheader("Goal!")
+    if st.button("Complete Journey"):
         st.balloons()
-        st.success(f"Good job, {user_name}! You've reached {city}!")
+        st.success(f"Well done, {user_name}! You've made progress toward {city}!")
