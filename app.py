@@ -23,7 +23,6 @@ def get_rank(completes):
 async def generate_voice(text, speed="+0%"):
     if os.path.exists("speech.mp3"):
         os.remove("speech.mp3")
-    # speedの形式は "+10%" や "-10%"
     communicate = edge_tts.Communicate(text, "en-US-GuyNeural", rate=speed)
     await communicate.save("speech.mp3")
 
@@ -32,8 +31,25 @@ def play_audio():
         with open("speech.mp3", "rb") as f:
             st.audio(f.read(), format="audio/mp3")
 
-# --- 3. UI設定 ---
+# --- 3. UI設定 & カスタムCSS (フォントサイズ調整) ---
 st.set_page_config(page_title="English Road Trip", layout="wide")
+
+# 英文を30%大きく(約24px)、和訳を少し控えめにするCSS
+st.markdown("""
+    <style>
+    .en-text {
+        font-size: 26px !important;
+        font-weight: 600 !important;
+        line-height: 1.6 !important;
+        color: #1E3A8A !important;
+        margin-bottom: 10px;
+    }
+    .ja-text {
+        font-size: 18px !important;
+        color: #4B5563 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
 with st.sidebar:
     st.title("🗺️ My Progress")
@@ -42,7 +58,7 @@ with st.sidebar:
     rank, city, icon, color = get_rank(total_comp)
     st.markdown(f"<div style='background-color:{color}; padding:20px; border-radius:10px; color:white; text-align:center;'><h2>{icon} {rank}</h2><p>{city}</p></div>", unsafe_allow_html=True)
 
-st.title("🚀 English Road Trip: Intensive Training")
+st.title("🚀 English Road Trip")
 
 # --- 4. テキスト入力エリア ---
 with st.expander("📝 教材をセットする", expanded=True):
@@ -53,76 +69,67 @@ if not input_text:
     st.info("英文を貼り付けて修行を開始しましょう！")
     st.stop()
 
-# テキストを一文ごとに分割する（ピリオド、クエスチョンマークなどで区切る）
+# テキストを一文ごとに分割
 sentences = [s.strip() for s in re.split(r'(?<=[.!?]) +', input_text) if s.strip()]
+ja_sentences = [j.strip() for j in re.split(r'(?<=[。！？]) +', input_ja) if j.strip()]
 
 # --- 5. 修行ステップ ---
 st.divider()
 tabs = st.tabs(["R0: Intro", "R1: Repeat", "R2: Interpret", "R3: Overlap", "R4: Shadow", "R5: Performance"])
 
-# --- R0: 一回声に出して読む ---
+# --- R0: 意味確認 & プレ読解 ---
 with tabs[0]:
     st.subheader("Round 0: Orientation")
-    st.write("まずは全体を確認して、一度声に出して読んでみましょう。")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.info(input_text)
-    with col2:
-        st.success(input_ja)
+    st.markdown(f'<p class="en-text">{input_text}</p>', unsafe_allow_html=True)
+    st.markdown(f'<p class="ja-text">{input_ja}</p>', unsafe_allow_html=True)
     st.audio_input("音読を記録 (R0)")
 
 # --- R1: 一文ごとのリピーティング ---
 with tabs[1]:
     st.subheader("Round 1: Sentence Repeating")
-    st.write("一文ずつ聞いて、後に続いてリピートしてください。")
     for i, s in enumerate(sentences):
-        col_s, col_p = st.columns([4, 1])
-        col_s.write(f"{i+1}. {s}")
-        if col_p.button(f"Play {i+1}", key=f"r1_{i}"):
-            asyncio.run(generate_voice(s))
-            play_audio()
+        with st.container():
+            st.markdown(f'<p class="en-text">{i+1}. {s}</p>', unsafe_allow_html=True)
+            if st.button(f"🔊 Listen {i+1}", key=f"r1_{i}"):
+                asyncio.run(generate_voice(s))
+                play_audio()
+            st.write("---")
 
 # --- R2: 意味を確認してリピーティング ---
 with tabs[2]:
     st.subheader("Round 2: Interpretation & Repeat")
-    st.write("和訳を確認しながら、一文ずつリピート。")
-    # ここでは和訳も一文ずつ出すために、入力された和訳も分割を試みる
-    ja_sentences = [j.strip() for j in re.split(r'(?<=[。！？]) +', input_ja) if j.strip()]
-    
     for i, s in enumerate(sentences):
         with st.container(border=True):
-            st.write(f"EN: {s}")
+            st.markdown(f'<p class="en-text">{s}</p>', unsafe_allow_html=True)
             if i < len(ja_sentences):
-                st.caption(f"JA: {ja_sentences[i]}")
-            if st.button(f"Listen {i+1}", key=f"r2_{i}"):
+                st.markdown(f'<p class="ja-text">意味: {ja_sentences[i]}</p>', unsafe_allow_html=True)
+            if st.button(f"🔊 Listen {i+1}", key=f"r2_{i}"):
                 asyncio.run(generate_voice(s))
                 play_audio()
 
-# --- R3: オーバーラッピング（スピード調整付） ---
+# --- R3: オーバーラッピング ---
 with tabs[3]:
     st.subheader("Round 3: Overlapping")
-    st.write("音声と同時に発音します。最後まで一気に流れます。")
     speed_option = st.select_slider("再生スピード", options=["-20%", "-10%", "+0%", "+10%", "+20%"], value="+0%")
-    st.info(input_text)
-    if st.button("Start Overlapping"):
+    st.markdown(f'<p class="en-text">{input_text}</p>', unsafe_allow_html=True)
+    if st.button("▶️ Start Overlapping"):
         asyncio.run(generate_voice(input_text, speed=speed_option))
         play_audio()
 
 # --- R4: シャドーイング（文字なし） ---
 with tabs[4]:
     st.subheader("Round 4: Shadowing")
-    st.warning("文字は見えません。耳だけで追いかけてください！")
-    speed_shadow = st.select_slider("再生スピード (Shadowing)", options=["-20%", "-10%", "+0%", "+10%", "+20%"], value="+0%", key="shadow_speed")
-    if st.button("Start Shadowing"):
+    st.warning("耳に集中してください！")
+    speed_shadow = st.select_slider("再生スピード", options=["-20%", "-10%", "+0%", "+10%", "+20%"], value="+0%", key="sh_v")
+    if st.button("▶️ Start Shadowing"):
         asyncio.run(generate_voice(input_text, speed=speed_shadow))
         play_audio()
 
 # --- R5: 本番音読 ---
 with tabs[5]:
     st.subheader("Round 5: Final Performance")
-    st.write("日本語をイメージしながら、気持ちを込めて音読しましょう。")
-    st.info(input_text)
-    st.audio_input("最終パフォーマンスを録音")
-    if st.button("Complete Journey!"):
+    st.markdown(f'<p class="en-text">{input_text}</p>', unsafe_allow_html=True)
+    st.audio_input("魂の音読を録音")
+    if st.button("🏁 Journey Complete!"):
         st.balloons()
-        st.success(f"Congratulation, {user_name}! You've reached {city}!")
+        st.success(f"Excellent! You've made progress toward {city}!")
