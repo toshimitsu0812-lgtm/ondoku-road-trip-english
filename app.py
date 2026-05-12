@@ -4,22 +4,7 @@ import edge_tts
 import base64
 import os
 
-# --- 1. 教材データ（ここを自由に書き換えてください） ---
-# 複数の教材を入れたい場合は、辞書形式で増やせます
-MATERIALS = {
-    "L1": {
-        "title": "I Have a Dream",
-        "en": "I have a dream that one day this nation will rise up and live out the true meaning of its creed.",
-        "ja": "私には夢がある。いつの日か、この国が立ち上がり、その信条の真の意味を実践することを。"
-    },
-    "L2": {
-        "title": "Imagine",
-        "en": "Imagine all the people living life in peace. You may say I'm a dreamer, but I'm not the only one.",
-        "ja": "すべての人が平和に生きていると想像してごらん。君は僕を夢想家だと言うかもしれない。でも、僕一人じゃないんだ。"
-    }
-}
-
-# --- 2. 称号システム (Road Trip) ---
+# --- 1. 称号システム (Road Trip) ---
 def get_rank(completes):
     ranks = [
         (50, "West Coast Legend", "San Francisco", "🔥", "#000000"),
@@ -33,20 +18,16 @@ def get_rank(completes):
         if completes >= c:
             return title, city, icon, color
 
-# --- 3. 音声生成ロジック ---
+# --- 2. 音声生成ロジック ---
 async def generate_voice(text):
+    # 以前の音声ファイルを削除して重複を避ける
+    if os.path.exists("speech.mp3"):
+        os.remove("speech.mp3")
     communicate = edge_tts.Communicate(text, "en-US-GuyNeural")
     await communicate.save("speech.mp3")
 
-# --- 4. メインUI ---
+# --- 3. メインUI設定 ---
 st.set_page_config(page_title="English Road Trip", layout="wide")
-
-# URLの末尾 (?lesson=L1) から教材を特定。指定がなければL1を表示。
-query_params = st.query_params
-lesson_id = query_params.get("lesson", "L1")
-
-# 教材の取得
-lesson_data = MATERIALS.get(lesson_id, MATERIALS["L1"])
 
 # サイドバー (進捗表示)
 with st.sidebar:
@@ -54,30 +35,52 @@ with st.sidebar:
     user_name = st.text_input("Name", "Student")
     total_comp = st.number_input("Total Completes", 0, step=1)
     rank, city, icon, color = get_rank(total_comp)
-    st.markdown(f"<div style='background-color:{color}; padding:20px; border-radius:10px; color:white; text-align:center;'><h2>{icon} {rank}</h2><p>Dest: {city}</p></div>", unsafe_allow_html=True)
+    st.markdown(f"""
+    <div style='background-color:{color}; padding:20px; border-radius:10px; color:white; text-align:center;'>
+        <h2>{icon} {rank}</h2>
+        <p>Current: {city}</p>
+    </div>
+    """, unsafe_allow_html=True)
+    st.write("---")
+    st.caption("授業で使う場合は、先生から送られたテキストを貼り付けてください。")
 
-# メインコンテンツ
-st.title(f"🚀 {lesson_data['title']}")
+# --- 4. テキスト入力エリア ---
+st.title("🚀 English Road Trip: Free Practice")
 
+# ここで自由にテキストを入れられるようにします
+st.subheader("1. 練習したいテキストを入力してください")
+input_text = st.text_area("English Text", placeholder="Paste your English text here...", height=150)
+input_ja = st.text_area("Japanese Meaning (Optional)", placeholder="日本語訳（任意）", height=100)
+
+if not input_text:
+    st.info("👆 上のボックスに英文を貼り付けると、修行がスタートします！")
+    st.stop()
+
+# --- 5. 修行コンテンツ ---
+st.divider()
 tab0, tab1, tab2 = st.tabs(["📖 Reading", "🎧 Training", "🏁 Finish"])
 
 with tab0:
     st.subheader("Text & Meaning")
-    st.info(lesson_data['en'])
-    with st.expander("日本語訳を表示"):
-        st.write(lesson_data['ja'])
+    st.info(input_text)
+    if input_ja:
+        with st.expander("日本語訳を表示"):
+            st.write(input_ja)
 
 with tab1:
+    st.subheader("Audio Training")
     mode = st.radio("Practice Mode", ["Visible (R1-R3)", "Hidden (R4)"])
+    
     if mode == "Visible (R1-R3)":
-        st.info(lesson_data['en'])
+        st.info(input_text)
     else:
-        st.warning("Concentrate on the SOUND!")
+        st.warning("耳に集中しましょう！(Text Hidden)")
     
     if st.button("🔊 Play Voice"):
-        asyncio.run(generate_voice(lesson_data['en']))
-        with open("speech.mp3", "rb") as f:
-            st.audio(f.read(), format="audio/mp3")
+        with st.spinner("Preparing Audio..."):
+            asyncio.run(generate_voice(input_text))
+            with open("speech.mp3", "rb") as f:
+                st.audio(f.read(), format="audio/mp3")
 
 with tab2:
     st.subheader("Goal!")
