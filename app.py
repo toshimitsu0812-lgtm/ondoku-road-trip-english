@@ -23,7 +23,9 @@ def get_rank(completes):
 async def generate_voice(text, speed="+0%"):
     if os.path.exists("speech.mp3"):
         os.remove("speech.mp3")
-    communicate = edge_tts.Communicate(text, "en-US-GuyNeural", rate=speed)
+    # スラッシュをコンマに置換することで、AI音声に自然なポーズ（タメ）を作らせる
+    ssml_text = text.replace("/", ",")
+    communicate = edge_tts.Communicate(ssml_text, "en-US-GuyNeural", rate=speed)
     await communicate.save("speech.mp3")
 
 def play_audio():
@@ -31,18 +33,22 @@ def play_audio():
         with open("speech.mp3", "rb") as f:
             st.audio(f.read(), format="audio/mp3")
 
-# --- 3. UI設定 & カスタムCSS (フォントサイズ調整) ---
+# --- 3. UI設定 & カスタムCSS ---
 st.set_page_config(page_title="English Road Trip", layout="wide")
 
-# 英文を30%大きく(約24px)、和訳を少し控えめにするCSS
 st.markdown("""
     <style>
     .en-text {
-        font-size: 26px !important;
+        font-size: 28px !important;
         font-weight: 600 !important;
-        line-height: 1.6 !important;
+        line-height: 1.8 !important;
         color: #1E3A8A !important;
         margin-bottom: 10px;
+    }
+    .slash {
+        color: #EF4444 !important; /* スラッシュを赤色にして目立たせる */
+        font-weight: bold;
+        margin: 0 5px;
     }
     .ja-text {
         font-size: 18px !important;
@@ -61,13 +67,18 @@ with st.sidebar:
 st.title("🚀 English Road Trip")
 
 # --- 4. テキスト入力エリア ---
-with st.expander("📝 教材をセットする", expanded=True):
+with st.expander("📝 教材をセットする（スラッシュ / を入れてください）", expanded=True):
+    st.caption("例: I have a dream / that one day / this nation will rise up.")
     input_text = st.text_area("English Text", placeholder="英文を入力...", height=150)
     input_ja = st.text_area("Japanese Translation", placeholder="和訳を入力...", height=100)
 
 if not input_text:
-    st.info("英文を貼り付けて修行を開始しましょう！")
+    st.info("英文にスラッシュを入れて貼り付けてください！")
     st.stop()
+
+# スラッシュを赤色で表示するためのヘルパー関数
+def format_slash(text):
+    return text.replace("/", '<span class="slash">/</span>')
 
 # テキストを一文ごとに分割
 sentences = [s.strip() for s in re.split(r'(?<=[.!?]) +', input_text) if s.strip()]
@@ -77,10 +88,10 @@ ja_sentences = [j.strip() for j in re.split(r'(?<=[。！？]) +', input_ja) if 
 st.divider()
 tabs = st.tabs(["R0: Intro", "R1: Repeat", "R2: Interpret", "R3: Overlap", "R4: Shadow", "R5: Performance"])
 
-# --- R0: 意味確認 & プレ読解 ---
+# --- R0: 意味確認 ---
 with tabs[0]:
     st.subheader("Round 0: Orientation")
-    st.markdown(f'<p class="en-text">{input_text}</p>', unsafe_allow_html=True)
+    st.markdown(f'<p class="en-text">{format_slash(input_text)}</p>', unsafe_allow_html=True)
     st.markdown(f'<p class="ja-text">{input_ja}</p>', unsafe_allow_html=True)
     st.audio_input("音読を記録 (R0)")
 
@@ -88,19 +99,18 @@ with tabs[0]:
 with tabs[1]:
     st.subheader("Round 1: Sentence Repeating")
     for i, s in enumerate(sentences):
-        with st.container():
-            st.markdown(f'<p class="en-text">{i+1}. {s}</p>', unsafe_allow_html=True)
-            if st.button(f"🔊 Listen {i+1}", key=f"r1_{i}"):
-                asyncio.run(generate_voice(s))
-                play_audio()
-            st.write("---")
+        st.markdown(f'<p class="en-text">{i+1}. {format_slash(s)}</p>', unsafe_allow_html=True)
+        if st.button(f"🔊 Listen {i+1}", key=f"r1_{i}"):
+            asyncio.run(generate_voice(s))
+            play_audio()
+        st.write("---")
 
 # --- R2: 意味を確認してリピーティング ---
 with tabs[2]:
     st.subheader("Round 2: Interpretation & Repeat")
     for i, s in enumerate(sentences):
         with st.container(border=True):
-            st.markdown(f'<p class="en-text">{s}</p>', unsafe_allow_html=True)
+            st.markdown(f'<p class="en-text">{format_slash(s)}</p>', unsafe_allow_html=True)
             if i < len(ja_sentences):
                 st.markdown(f'<p class="ja-text">意味: {ja_sentences[i]}</p>', unsafe_allow_html=True)
             if st.button(f"🔊 Listen {i+1}", key=f"r2_{i}"):
@@ -110,8 +120,8 @@ with tabs[2]:
 # --- R3: オーバーラッピング ---
 with tabs[3]:
     st.subheader("Round 3: Overlapping")
-    speed_option = st.select_slider("再生スピード", options=["-20%", "-10%", "+0%", "+10%", "+20%"], value="+0%")
-    st.markdown(f'<p class="en-text">{input_text}</p>', unsafe_allow_html=True)
+    speed_option = st.select_slider("再生スピード", options=["-20%", "-10%", "+0%", "+10%", "+20%"], value="+0%", key="r3_s")
+    st.markdown(f'<p class="en-text">{format_slash(input_text)}</p>', unsafe_allow_html=True)
     if st.button("▶️ Start Overlapping"):
         asyncio.run(generate_voice(input_text, speed=speed_option))
         play_audio()
@@ -120,7 +130,7 @@ with tabs[3]:
 with tabs[4]:
     st.subheader("Round 4: Shadowing")
     st.warning("耳に集中してください！")
-    speed_shadow = st.select_slider("再生スピード", options=["-20%", "-10%", "+0%", "+10%", "+20%"], value="+0%", key="sh_v")
+    speed_shadow = st.select_slider("再生スピード", options=["-20%", "-10%", "+0%", "+10%", "+20%"], value="+0%", key="r4_s")
     if st.button("▶️ Start Shadowing"):
         asyncio.run(generate_voice(input_text, speed=speed_shadow))
         play_audio()
@@ -128,8 +138,8 @@ with tabs[4]:
 # --- R5: 本番音読 ---
 with tabs[5]:
     st.subheader("Round 5: Final Performance")
-    st.markdown(f'<p class="en-text">{input_text}</p>', unsafe_allow_html=True)
+    # R5はスラッシュなしで実力を試すのもアリですが、今回は指示通りスラッシュありで表示します
+    st.markdown(f'<p class="en-text">{format_slash(input_text)}</p>', unsafe_allow_html=True)
     st.audio_input("魂の音読を録音")
     if st.button("🏁 Journey Complete!"):
         st.balloons()
-        st.success(f"Excellent! You've made progress toward {city}!")
